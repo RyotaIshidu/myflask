@@ -14,7 +14,6 @@ CLOUDSQL_PASSWORD = os.environ.get('CLOUDSQL_PASSWORD')
 app = Flask(__name__)
 # Note: We don't need to call run() since our application is embedded within
 # the App Engine WSGI application server.
-data=''
 
 def connect_to_cloudsql():
     # When deployed to App Engine, the `SERVER_SOFTWARE` environment variable
@@ -45,17 +44,16 @@ def connect_to_cloudsql():
 @app.route('/')
 def hello():
     """Return a friendly HTTP greeting."""
-    print 'asdfasdf'
-    global data
-    return 'Hello GCP!'+'\n'+data
+    return 'Hello GCP!'
 
 @app.route('/poles', methods=['GET'])
 def get_poles():
     """Return a friendly HTTP greeting."""
+    print 'get_poles'
     ids = request.args.get('pole_ids', '')
     ids = ids.replace('[', '')
     ids = ids.replace(']', '')
-    print ids
+    print 'ids: [%s]' % ids
     db = connect_to_cloudsql()
     cursor = db.cursor()
     cursor.execute('USE drone')
@@ -64,27 +62,28 @@ def get_poles():
     data = {}
     for r in cursor.fetchall():
         data[r[0]]={'longitude': r[1], 'latitude': r[2], 'created_at': r[3]}
+    cursor.close()
+    db.close()
     return json.dumps({ "status": "OK", "poles": data})
 
 @app.route('/api/insert_pole', methods=['POST'])
 def insert_pole():
+    print 'insert_pole'
     if request.headers['Content-Type'] != 'application/json':
-        data='Content-Type is not application/json'
+        print 'Content-Type Error :'
         print request.headers['Content-Type']
         return json.dumps({ "status": "error"}), 400
     requestJson = request.json
     sql = 'INSERT INTO drone.poles (pole_id, longitude, latitude) VALUE (%(pole_id)d,%(longitude)s,%(latitude)s)' % requestJson
-    print sql
     db = connect_to_cloudsql()
     cursor = db.cursor()
     try:
-        affected_count = cursor.execute('USE drone')
+        cursor.execute('USE drone')
         cursor.execute(sql)
         db.commit()
-        print "%d" % affected_count
-        print "inserted values %(pole_id)d,%(longitude)s,%(latitude)s" % requestJson
+        print "inserted values %(pole_id)d, %(longitude)s, %(latitude)s" % requestJson
     except MySQLdb.IntegrityError:
-        print "failed to insert values %(pole_id)d,%(longitude)s,%(latitude)s" % requestJson
+        print "failed to insert values %(pole_id)d, %(longitude)s, %(latitude)s" % requestJson
     finally:
         cursor.close()
         db.close()
