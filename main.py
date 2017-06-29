@@ -59,27 +59,35 @@ def get_poles():
     db = connect_to_cloudsql()
     cursor = db.cursor()
     cursor.execute('USE drone')
-    sql = 'SELECT pole_id, longitude, latitude, created_at FROM poles p1 WHERE pole_id IN (' + ids + ') AND created_at=(SELECT MAX(created_at) FROM poles p2 WHERE p1.pole_id = p2.pole_id)'
+    sql = 'SELECT pole_id, longitude, latitude, created_at FROM poles p1 WHERE pole_id IN (%s) AND created_at=(SELECT MAX(created_at) FROM poles p2 WHERE p1.pole_id = p2.pole_id)' % ids
     cursor.execute(sql)
     data = {}
     for r in cursor.fetchall():
         data[r[0]]={'longitude': r[1], 'latitude': r[2], 'created_at': r[3]}
     return json.dumps({ "status": "OK", "poles": data})
 
-@app.route('/api/test', methods=['POST'])
+@app.route('/api/insert_pole', methods=['POST'])
 def insert_pole():
     if request.headers['Content-Type'] != 'application/json':
         data='Content-Type is not application/json'
         print request.headers['Content-Type']
         return json.dumps({ "status": "error"}), 400
     requestJson = request.json
-    sql = 'INSERT INTO drone.poles (pole_id, longitude, latitude) VALUE (3,12.341,56.785)'
-    # sql = 'INSERT INTO drone.poles (pole_id, longitude, latitude) VALUE (' + str(requestJson['pole_id']) + ',' + requestJson['longitude'] + ',' + requestJson['latitude'] + ')'
+    sql = 'INSERT INTO drone.poles (pole_id, longitude, latitude) VALUE (%(pole_id)d,%(longitude)s,%(latitude)s)' % requestJson
     print sql
     db = connect_to_cloudsql()
     cursor = db.cursor()
-    cursor.execute('USE drone')
-    cursor.execute(sql)
+    try:
+        affected_count = cursor.execute('USE drone')
+        cursor.execute(sql)
+        db.commit()
+        print "%d" % affected_count
+        print "inserted values %(pole_id)d,%(longitude)s,%(latitude)s" % requestJson
+    except MySQLdb.IntegrityError:
+        print "failed to insert values %(pole_id)d,%(longitude)s,%(latitude)s" % requestJson
+    finally:
+        cursor.close()
+        db.close()
     return json.dumps({ "status": "OK"})
 
 @app.errorhandler(404)
